@@ -2,6 +2,7 @@ package hwPoll
 
 import (
 	"def"
+	"time"
 	"liftCtrl"
 	"library/hw"
 	"library/colors"
@@ -39,7 +40,9 @@ func pollOrderPanel(order_To_OrderDistr chan<- def.Order, lastOrdersSensed [][]b
 			if status && status != lastOrdersSensed[button][floor] {
 				lastOrdersSensed[button][floor] = true
 				order_To_OrderDistr <- def.Order{Floor:     floor,
-												Button:    button}
+												Button:    	button,
+												Value: 		true,
+												Timestamp: 	time.Now().Unix()}
 			}
 			lastOrdersSensed[button][floor] = status
 		}

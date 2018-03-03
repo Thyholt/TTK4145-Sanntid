@@ -25,24 +25,24 @@ func New() Orders {
 
 // Saves the newest order
 func (orders Orders) Update(order def.Order) {
-	ASSERTION_ERROR(!validateFloorButtonCombination(order.Button, order.Floor), "Invalid function arguments. Button: "+strconv.Itoa(order.Button)+" Floor: "+strconv.Itoa(order.Floor))
+	ASSERTION_ERROR(!ValidateFloorButtonCombination(order.Button, order.Floor), "Invalid function arguments. Button: "+strconv.Itoa(order.Button)+" Floor: "+strconv.Itoa(order.Floor))
 	if order.Timestamp > orders[order.Button][order.Floor].Timestamp {
-		(
-	orders)[order.Button][order.Floor].Value = order.Value
-		(
-	orders)[order.Button][order.Floor].Timestamp = order.Timestamp
+		orders[order.Button][order.Floor].Value = order.Value
+		orders[order.Button][order.Floor].Timestamp = order.Timestamp
 	}
 }
 
 func (orders Orders) Get(button, floor int) def.Order {
-	ASSERTION_ERROR(!validateFloorButtonCombination(button, floor), "Invalid function arguments. Button: "+strconv.Itoa(button)+" Floor: "+strconv.Itoa(floor))
+	ASSERTION_ERROR(!ValidateFloorButtonCombination(button, floor), "Invalid function arguments. Button: "+strconv.Itoa(button)+" Floor: "+strconv.Itoa(floor))
+	orders[button][floor].Button = button
+	orders[button][floor].Floor = floor
 	return orders[button][floor]
 }
 
 func (orders Orders) Merge(ordersToMerge Orders) {
 	for floor := def.GROUND_FLOOR; floor < def.N_FLOOR; floor++ {
 		for button := range []int{def.BTN_UP, def.BTN_DOWN, def.BTN_INTERNAL} {
-			if validateFloorButtonCombination(button, floor) {
+			if ValidateFloorButtonCombination(button, floor) {
 				if ordersToMerge[button][floor].Timestamp > orders[button][floor].Timestamp {
 					orders[button][floor].Value = ordersToMerge[button][floor].Value
 					orders[button][floor].Timestamp = ordersToMerge[button][floor].Timestamp
@@ -50,6 +50,17 @@ func (orders Orders) Merge(ordersToMerge Orders) {
 			}
 		}
 	}
+}
+
+func ValidateFloorButtonCombination(button, floor int) bool {
+	if button == def.BTN_UP && floor < def.TOP_FLOOR && floor >= def.GROUND_FLOOR {
+		return true
+	} else if button == def.BTN_DOWN && floor <= def.TOP_FLOOR && floor > def.GROUND_FLOOR {
+		return true
+	} else if button == def.BTN_INTERNAL && floor <= def.TOP_FLOOR && floor >= def.GROUND_FLOOR {
+		return true
+	}
+	return false
 }
 
 func (orders Orders) Print() {
@@ -84,15 +95,4 @@ func (orders Orders) Print() {
 		}
 	}
 	fmt.Printf("\n|-----------------------------------------------------------------|\n")
-}
-
-func validateFloorButtonCombination(button, floor int) bool {
-	if button == def.BTN_UP && floor < def.TOP_FLOOR && floor >= def.GROUND_FLOOR {
-		return true
-	} else if button == def.BTN_DOWN && floor <= def.TOP_FLOOR && floor > def.GROUND_FLOOR {
-		return true
-	} else if button == def.BTN_INTERNAL && floor <= def.TOP_FLOOR && floor >= def.GROUND_FLOOR {
-		return true
-	}
-	return false
 }

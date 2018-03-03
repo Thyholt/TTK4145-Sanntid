@@ -14,7 +14,6 @@ type Channels struct {
 }
 
 func Run(ch Channels) {
-	var nextFloor int
 	moveLimit := time.Second * 3
 	infLimit := time.Second * 6666
 
@@ -24,32 +23,18 @@ func Run(ch Channels) {
 	for {
 		select {
 		case status := <-ch.StatusUpdate:
-			if status.LastFloor != nextFloor {
-				//eventQueue <- liftCtrl.Event{EventType: liftCtrl.NON_FUNCTIONAL}
-			}
-			switch status.LastDir {
-			case def.DIR_UP:
-				if status.LastFloor < def.TOP_FLOOR {
-					nextFloor = status.LastFloor + 1
+			if status.LastDir == def.DIR_UP || status.LastDir == def.DIR_DOWN{
+				if status.LastFloor < def.TOP_FLOOR || status.LastFloor > def.GROUND_FLOOR{
 					timer = time.NewTimer(moveLimit)
 				} else {
-					nextFloor = status.LastFloor
 					timer = time.NewTimer(infLimit)
 				}
-			case def.DIR_DOWN:
-				if status.LastFloor > def.GROUND_FLOOR {
-					nextFloor = status.LastFloor - 1
-					timer = time.NewTimer(moveLimit)
-				} else {
-					nextFloor = status.LastFloor
-					timer = time.NewTimer(infLimit)
-				}
-			case def.DIR_STOP:
-				nextFloor = status.LastFloor
+			} else if status.LastDir == def.DIR_STOP {
 				timer = time.NewTimer(infLimit)
 			}
 		case <-timer.C:
-			liftCtrl.Send_HW_FAIL_event(ch.EventQueue)
+			WARNING("Send_LIFT_OBSTRUCTION_event")
+			liftCtrl.Send_LIFT_OBSTRUCTION_event(ch.EventQueue)
 			timer = time.NewTimer(infLimit)
 
 		}

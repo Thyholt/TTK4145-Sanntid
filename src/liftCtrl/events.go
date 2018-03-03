@@ -12,7 +12,7 @@ type Event struct {
 }
 
 func Send_EXE_ORDER_event(eventQueue chan<- Event, order def.Order) {
-	eventQueue <- Event{eventType: evt_EXE_ORDER, floor: order.Floor, button: order.Button}
+	eventQueue <- Event{eventType: evt_EXE_ORDER, floor: order.Floor, button: order.Button, boolean: true}
 
 }
 
@@ -24,16 +24,14 @@ func Send_NEW_FLOOR_event(eventQueue chan<- Event, floor int) {
 		boolean:   true}
 }
 
-func Send_HW_FAIL_event(eventQueue chan<- Event) {
-	eventQueue <- Event{eventType: evt_HW_FAIL, boolean: true}
+func Send_LIFT_OBSTRUCTION_event(eventQueue chan<- Event) {
+	eventQueue <- Event{eventType: evt_LIFT_OBSTRUCTION, boolean: true}
 }
 
 //events
 const (
-	evt_HW_FAIL = int(iota)
-	evt_EXE_ORDER
+	evt_EXE_ORDER = int(iota)
 	evt_NEW_FLOOR
-
 	evt_DOOR_TIMER_OUT
-	evt_RESTART_DONE
+	evt_LIFT_OBSTRUCTION
 )

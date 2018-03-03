@@ -2,14 +2,15 @@ package synchOrders
 
 import (
 	"def"
-	//"fmt"
+	"fmt"
 	_ "library/assertionCheck"
 	. "library/colors"
 	. "library/logger"
 	"library/hw"
 	"library/lifts"
-	"library/network/bcast"
 	"library/orders"
+	"library/network/bcast"
+	"library/cabOrdersBackup"
 	"liftCtrl"
 	"time"
 )
@@ -24,11 +25,15 @@ type ExtrnChannels struct {
 func Run(ID int, extrnChs ExtrnChannels) {
 	var intrnChs intrnChannels
 	lifts := lifts.New(LIFT_ACTIVITY_LIMIT)
-	orders := orders.New()
-	orders.Update(def.Order{def.BTN_UP, def.GROUND_FLOOR+2, true, time.Now().Unix()})
 
+	localOrders := orders.New()
+
+	initOrders(&localOrders)
 	initNetwork(&intrnChs.Net)
 	initTimers(&intrnChs.Timers)
+
+	status := <-extrnChs.Status_from_liftCtrl
+	lifts.Update(ID, status)
 
 	INFO("synchOrders/init" + "     |" + ColG + " DONE" + ColN)
 
@@ -36,21 +41,22 @@ func Run(ID int, extrnChs ExtrnChannels) {
 		select {
 		//liftCtrl
 		case status := <-extrnChs.Status_from_liftCtrl:
-			removeOfflineLifts(lifts)
 			lifts.Update(ID, status)
 			break
 
 		case completeOrder := <-extrnChs.ComleteOrder_from_liftCtrl:
-			orders.Update(completeOrder)
+			cabOrdersBackup.Dump(localOrders)
+			localOrders.Update(completeOrder)
 
 		//hwPoll
 		case newOrder := <-extrnChs.NewOrder_from_hwPoll:
-			orders.Update(newOrder)
+			cabOrdersBackup.Dump(localOrders)
+			localOrders.Update(newOrder)
 			break
 
 		// network
 		case recvOrders := <-intrnChs.Net.RecvOrders:
-			orders.Merge(recvOrders)
+			localOrders.Merge(recvOrders)
 			break
 		case heartbeat := <-intrnChs.Net.RecvHeartbeat:
 			lifts.Update(heartbeat.ID, heartbeat.LiftState)
@@ -58,17 +64,19 @@ func Run(ID int, extrnChs ExtrnChannels) {
 
 		//timers
 		case <-intrnChs.Timers.BcastOrders:
-			intrnChs.Net.BcastOrders <- orders
+			bcastHallOrders(intrnChs.Net.BcastOrders, localOrders)
+			
 
 		case <-intrnChs.Timers.BcastHeartbeat:
-			intrnChs.Net.BcastHeartbeat <- heartbeat{ID,lifts.Status(ID)}
+			bcastHeartbeat(intrnChs.Net.BcastHeartbeat,ID,lifts.Status(ID))
 			break
 
 		case <-intrnChs.Timers.PushBestFitOrderToLiftCtrl:
 			lifts.Print()
-			orders.Print()
-
-			if bestFitOrder := determNextOrder(ID, lifts, orders); bestFitOrder.Value {
+			localOrders.Print()
+			updateOrderbuttonLights(localOrders)
+			removeOfflineLifts(lifts)
+			if bestFitOrder := determNextOrderAmongOnlineLifts(ID, lifts, localOrders); bestFitOrder.Value {
 				liftCtrl.Send_EXE_ORDER_event(extrnChs.EventQueue, bestFitOrder)
 			}
 			break
@@ -76,7 +84,21 @@ func Run(ID int, extrnChs ExtrnChannels) {
 		}
 	}
 }
+func bcastHeartbeat(ch chan<- heartbeat, ID int, status def.Status) {
+	ch <- heartbeat{ID,status}
+}
 
+func bcastHallOrders(ch chan<- orders.Orders, localOrders orders.Orders) {
+	hallOrders := orders.New()
+	for floor := def.GROUND_FLOOR; floor < def.N_FLOOR; floor++ {
+		for button := range []int{def.BTN_UP, def.BTN_DOWN,} {
+			if orders.ValidateFloorButtonCombination(button, floor) {
+				hallOrders.Update(localOrders.Get(button,floor))
+			}
+		}
+	}
+	ch <- hallOrders
+}
 
 func removeOfflineLifts(lifts lifts.Lifts) {
 	for _, id := range lifts.IDs() {
@@ -86,43 +108,40 @@ func removeOfflineLifts(lifts lifts.Lifts) {
 	}
 }
 
-func updateOrderbuttonLights(orders orders.Orders) {
+func updateOrderbuttonLights(o orders.Orders) {
 	for floor := def.GROUND_FLOOR; floor < def.N_FLOOR; floor++ {
 		for button := range []int{def.BTN_UP, def.BTN_DOWN, def.BTN_INTERNAL} {
-			if validateFloorButtonCombination(button, floor) {
-				hw.SetButtonLamp(floor, button, orders.Get(button, floor).Value)
-				hw.SetButtonLamp(floor, def.BTN_INTERNAL, orders.Get(def.BTN_INTERNAL, floor).Value)
+			if orders.ValidateFloorButtonCombination(button, floor) {
+				hw.SetButtonLamp(floor, button, o.Get(button, floor).Value)
+				hw.SetButtonLamp(floor, def.BTN_INTERNAL, o.Get(def.BTN_INTERNAL, floor).Value)
 			}
 		}
 	}
 }
 
-func validateFloorButtonCombination(button, floor int) bool {
-	if button != def.BTN_UP && button != def.BTN_INTERNAL && button != def.BTN_DOWN {
-		return false
+func determNextOrderAmongOnlineLifts(liftID int, lifts lifts.Lifts, orders orders.Orders) def.Order {
+	// see if closest order is an cab order
+	temp_order, temp_dist := determClosestOrderAndDist(orders, lifts.Status(liftID))
+	if temp_order.Value && temp_order.Button == def.BTN_INTERNAL && lifts.Status(liftID).Operative == true {
+		return temp_order
 	}
-	if floor < def.GROUND_FLOOR || floor > def.TOP_FLOOR {
-		return false
-	}
-	if (button == def.BTN_DOWN && floor == def.GROUND_FLOOR) || (button == def.BTN_UP && floor == def.TOP_FLOOR) {
-		return false
-	}
-	return true
-}
 
+	// see if self is closest to an hall order
+	temp_dist = def.INF
 
-func determNextOrder(liftID int, lifts lifts.Lifts, orders orders.Orders) def.Order {
-	nextOrder, distance := determClosestOrderAndDist(orders, lifts.Status(liftID))
+	order, dist := determClosestOrderAndDist(orders, lifts.Status(liftID))
 	for _ , id := range lifts.IDs() {
-		if id == liftID || lifts.NetState(id) == def.OFFLINE || lifts.Status(id).Operative == false {
+		if lifts.NetState(id) == def.OFFLINE || lifts.Status(id).Operative == false {
 			break 
 		}
-		if _, testDistance := determClosestOrderAndDist(orders, lifts.Status(id)); testDistance < distance {
+		if temp_order, temp_dist = determClosestOrderAndDist(orders, lifts.Status(id)); temp_order.Value && temp_dist < dist {
 			return def.Order{Value: false}
 		}
-		INFO("HERE?")
 	}
-	return nextOrder
+	if lifts.Status(liftID).Operative {
+		return order
+	}
+	return def.Order{Value: false}
 }
 
 
@@ -131,6 +150,12 @@ func determNextOrder(liftID int, lifts lifts.Lifts, orders orders.Orders) def.Or
 func determClosestOrderAndDist(orders orders.Orders, liftStatus def.Status) (def.Order,int) {
 	var floor, button, distance int
 	var done bool
+	if liftStatus.LastFloor != def.GROUND_FLOOR && orders.Get(def.BTN_DOWN, liftStatus.LastFloor).Value {
+		return orders.Get(def.BTN_DOWN, liftStatus.LastFloor), def.NULL
+	} else if liftStatus.LastFloor != def.TOP_FLOOR && orders.Get(def.BTN_UP, liftStatus.LastFloor).Value {
+		return orders.Get(def.BTN_UP, liftStatus.LastFloor), def.NULL
+	}
+
 	if liftStatus.LastDir == def.DIR_UP {
 		if floor, button, distance, done = searchUp(orders, liftStatus.LastFloor, def.TOP_FLOOR, distance); done {
 			return def.Order{Button: button, Floor: floor, Value: true}, distance
@@ -175,6 +200,14 @@ func searchUp(orders orders.Orders, buttom int, top int, dist int) (int, int, in
 		dist += 1
 	}
 	return def.NONE, def.NONE, dist, false
+}
+
+func initOrders(localOrders *orders.Orders) {
+	if cabOrders, err := cabOrdersBackup.Get(); err == nil {
+		localOrders.Merge(cabOrders)
+	} else {
+		fmt.Println("cabOrdersBackup failed:", err)
+	}
 }
 
 func initTimers(timerChs *timerChannels) {

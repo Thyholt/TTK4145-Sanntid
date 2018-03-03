@@ -22,7 +22,6 @@ const (
 	BTN_UP = int(iota)
 	BTN_DOWN
 	BTN_INTERNAL
-	BTN_STOP
 )
 
 //direction
@@ -51,7 +50,7 @@ type Order struct {
 	Floor  		int
 	Button 		int
 	Value 		bool
-	Timestamp 	int64 //unix time
+	Timestamp 	int64 //unix
 }
 
 type Status struct {

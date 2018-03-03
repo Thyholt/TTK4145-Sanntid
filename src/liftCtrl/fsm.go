@@ -3,10 +3,10 @@ package liftCtrl
 import (
 	"def"
 	"fmt"
-	. "library/colors"
-	"library/hw"
-	. "library/logger"
 	"time"
+	"library/hw"
+	. "library/colors"
+	. "library/logger"
 )
 
 //----------------------------
@@ -19,150 +19,164 @@ type Channels struct {
 	Status_to_LiftWatchdog       chan<- def.Status
 }
 
-type liftCtrlState struct {
-	Status       def.Status
-	CurrentOrder def.Order
-}
-
-type stateFunc func(Event, Channels, *liftCtrlState) (next stateFunc)
+type stateFunc func(Event, Channels,*def.Status,*def.Order) (next stateFunc)
 
 //----------------------------
 //fsm
 
 func Run(ch Channels) {
 	stateFunc := stateIDLE
-	var liftState liftCtrlState
+
+	var liftStatus def.Status
+	var currentOrder def.Order
 
 	hw.Init()
 
 	if floor := hw.GetFloor(); floor > -1 {
-		liftState.Status.LastFloor = floor
+		liftStatus.LastFloor = floor
 	}
-	liftState.Status.LastDir = def.DIR_UP
-	liftState.Status.Operative = true
-
-	liftState.pushStatusToChannels(ch)
+	liftStatus.LastDir = def.DIR_DOWN
+	liftStatus.Operative = true
+	pushStatusToChannels(ch,liftStatus,def.DIR_STOP)
 
 	INFO("liftCtrl/init" + "           |" + ColG + " DONE" + ColN)
 
 	for {
-		stateFunc = stateFunc(<-ch.EventQueue, ch, &liftState)
+		stateFunc = stateFunc(<-ch.EventQueue, ch, &liftStatus, &currentOrder)
 	}
 }
 
-func stateIDLE(event Event, ch Channels, liftState *liftCtrlState) stateFunc {
+func stateIDLE(event Event, ch Channels, liftStatus *def.Status, currentOrder *def.Order) stateFunc {
 	switch event.eventType {
 	case evt_EXE_ORDER:
-		fmt.Println(event)
-	/*
-
-		if event.floor == def.NONE {
+		if event.boolean == false {
 			break
 		}
-		liftState.CurrentOrder = def.Order{Floor: event.floor, Button: event.button}
-		nextDir := determDir(*liftState)
+
+		*currentOrder = def.Order{Floor: event.floor, Button: event.button, Value: event.boolean}
+		nextDir := determDir(*liftStatus,*currentOrder)
 
 		if nextDir == def.DIR_UP || nextDir == def.DIR_DOWN {
 			hw.SetMotorDir(nextDir)
-			liftState.Status.LastDir = nextDir
-			(*liftState).pushStatusToChannels(ch)
+			liftStatus.LastDir = nextDir
+			pushStatusToChannels(ch,*liftStatus,nextDir)
 			return stateMOVE
 		} else if nextDir == def.DIR_STOP {
-			go completeOrder(liftState, ch)
+			go completeOrder(ch,liftStatus,currentOrder)
 			return stateFLOOR
-		}*/
-/*
-	default:
-		if nextState := generalEventHandler(event, ch, liftState); nextState != nil {
-			return nextState
 		}
-	}*/
+	default:
+		WARNING("Unexpected event")
+		fmt.Println(event)
 	}
 	return stateIDLE
 }
 
-func stateMOVE(event Event, ch Channels, liftState *liftCtrlState) stateFunc {
+func stateMOVE(event Event, ch Channels, liftStatus *def.Status, currentOrder *def.Order) stateFunc {
 	switch event.eventType {
 	case evt_EXE_ORDER:
-		break
-	case evt_NEW_FLOOR:
-		hw.SetFloorLamp(event.floor)
-		liftState.Status.LastFloor = event.floor
-		(*liftState).pushStatusToChannels(ch)
+		newOrder := def.Order{Floor: event.floor, Button: event.button, Value: event.boolean}
+		if compareSimilarityOfOrders(newOrder, *currentOrder) {
+			return stateMOVE
+		}
 
-		if nextDir := determDir(*liftState); nextDir == def.DIR_STOP {
-			go completeOrder(liftState, ch)
+		nextDir := determDir(*liftStatus,newOrder)
+		if nextDir == def.DIR_UP || nextDir == def.DIR_DOWN {
+			*currentOrder = newOrder
+			hw.SetMotorDir(nextDir)
+			liftStatus.LastDir = nextDir
+			pushStatusToChannels(ch,*liftStatus, liftStatus.LastDir)
+			return stateMOVE
+
+		} else if nextDir == def.DIR_STOP && liftStatus.LastFloor == hw.GetFloor(){
+			*currentOrder = newOrder
+			go completeOrder(ch,liftStatus,currentOrder)
 			return stateFLOOR
 		}
 
-	default:
-		if nextState := generalEventHandler(event, ch, liftState); nextState != nil {
-			return nextState
+	case evt_NEW_FLOOR:
+		hw.SetFloorLamp(event.floor)
+		liftStatus.LastFloor = event.floor
+		liftStatus.Operative = true
+		pushStatusToChannels(ch,*liftStatus, liftStatus.LastDir)
+
+		if nextDir := determDir(*liftStatus,*currentOrder); nextDir == def.DIR_STOP {
+			go completeOrder(ch,liftStatus,currentOrder)
+			return stateFLOOR
 		}
+	case evt_LIFT_OBSTRUCTION:
+			liftStatus.Operative = false
+			closestFloor := determClosestFloor(*liftStatus)
+			*currentOrder = def.Order{Button: def.BTN_INTERNAL, Floor: closestFloor, Value: true} 
+	default:
+		WARNING("Unexpected event")
+		fmt.Println(event)
 	}
 	return stateMOVE
 }
 
-func stateFLOOR(event Event, ch Channels, liftState *liftCtrlState) stateFunc {
+func stateFLOOR(event Event, ch Channels, liftStatus *def.Status, currentOrder *def.Order) stateFunc {
 	switch event.eventType {
 	case evt_EXE_ORDER:
+		*currentOrder = def.Order{Floor: event.floor, Button: event.button, Value: event.boolean}
 		break
 
 	case evt_DOOR_TIMER_OUT:
 		return stateIDLE
 
 	default:
-		if nextState := generalEventHandler(event, ch, liftState); nextState != nil {
-			return nextState
-		}
+		WARNING("Unexpected event")
+		fmt.Println(event)
 	}
 	return stateFLOOR
 }
 
-func generalEventHandler(event Event, ch Channels, liftState *liftCtrlState) stateFunc {
-	switch event.eventType {
-	/*
-		case evt_HW_FAIL:
-			go hwFailureProcedure(ch, liftState)
-			return stateFLOOR
-	*/
-	default:
-		WARNING("Unexpected event")
-		fmt.Println(event)
-	}
-	return nil
-}
 
 // //Utilities
-func (liftState liftCtrlState) pushStatusToChannels(ch Channels) {
-	ch.Status_to_LiftWatchdog <- liftState.Status
-	ch.Status_to_SynchOrders <- liftState.Status
+func determClosestFloor(liftStatus def.Status) int {
+	if liftStatus.LastFloor > def.GROUND_FLOOR && liftStatus.LastFloor < def.TOP_FLOOR {
+		return liftStatus.LastFloor + liftStatus.LastDir 
+	}
+	return liftStatus.LastFloor
 }
 
-func determDir(liftState liftCtrlState) int {
-	/*
-	if liftState.CurrentOrder == def.DummyOrder {
-		return liftState.Status.LastDir
-	}*/
+/* return true if equal floor, button, and value are equal, else returns false */
+func compareSimilarityOfOrders(order1, order2 def.Order) bool {
+	if order1.Floor == order2.Floor && order1.Button == order2.Button && order1.Value == order2.Value {
+		return true
+	} 
+	return false
+}
 
-	if liftState.CurrentOrder.Floor > liftState.Status.LastFloor {
+func pushStatusToChannels(ch Channels, liftStatus def.Status, currentDir int) {
+	ch.Status_to_LiftWatchdog <- def.Status{LastFloor: liftStatus.LastFloor, LastDir: currentDir}
+	ch.Status_to_SynchOrders <- liftStatus
+}
+
+func determDir(status def.Status, order def.Order) int {
+	if order.Floor > status.LastFloor {
 		return def.DIR_UP
 
-	} else if liftState.CurrentOrder.Floor < liftState.Status.LastFloor {
+	} else if order.Floor < status.LastFloor {
 		return def.DIR_DOWN
 	}
 	return def.DIR_STOP
 }
 
-func completeOrder(liftState *liftCtrlState, ch Channels) {
+func completeOrder(ch Channels, liftStatus *def.Status, currentOrder *def.Order) {
 	hw.SetDoorLamp(true)
 	hw.SetMotorDir(def.DIR_STOP)
-	if liftState.CurrentOrder.Button == def.BTN_UP || liftState.CurrentOrder.Button == def.BTN_DOWN {
-		hw.SetButtonLamp(liftState.CurrentOrder.Floor, liftState.CurrentOrder.Button, false)
-		ch.CompleteOrder_to_SynchOrders <- liftState.CurrentOrder
+	pushStatusToChannels(ch,*liftStatus,def.DIR_STOP)
+
+	currentOrder.Value = false
+	currentOrder.Timestamp = time.Now().Unix()
+
+	if currentOrder.Button == def.BTN_UP || currentOrder.Button == def.BTN_DOWN {
+		hw.SetButtonLamp(currentOrder.Floor, currentOrder.Button, false)
+		ch.CompleteOrder_to_SynchOrders <- *currentOrder
 	}
-	hw.SetButtonLamp(liftState.CurrentOrder.Floor, def.BTN_INTERNAL, false)
-	ch.CompleteOrder_to_SynchOrders <- def.Order{Button: def.BTN_INTERNAL, Floor: liftState.CurrentOrder.Floor}
+	ch.CompleteOrder_to_SynchOrders <- def.Order{Floor: currentOrder.Floor, Button: def.BTN_INTERNAL, Value: false, Timestamp: time.Now().Unix()}
+	hw.SetButtonLamp(currentOrder.Floor, def.BTN_INTERNAL, false)
 
 	timer := time.NewTimer(time.Second * 3)
 	<-timer.C
@@ -170,3 +184,4 @@ func completeOrder(liftState *liftCtrlState, ch Channels) {
 	hw.SetDoorLamp(false)
 	ch.EventQueue <- Event{eventType: evt_DOOR_TIMER_OUT}
 }
+
