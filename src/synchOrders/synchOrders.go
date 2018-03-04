@@ -45,13 +45,13 @@ func Run(ID int, extrnChs ExtrnChannels) {
 			break
 
 		case completeOrder := <-extrnChs.ComleteOrder_from_liftCtrl:
-			cabOrdersBackup.Dump(localOrders)
 			localOrders.Update(completeOrder)
+			cabOrdersBackup.Dump(localOrders)
 
 		//hwPoll
 		case newOrder := <-extrnChs.NewOrder_from_hwPoll:
-			cabOrdersBackup.Dump(localOrders)
 			localOrders.Update(newOrder)
+			cabOrdersBackup.Dump(localOrders)
 			break
 
 		// network
@@ -76,11 +76,7 @@ func Run(ID int, extrnChs ExtrnChannels) {
 			localOrders.Print()
 			updateOrderbuttonLights(localOrders)
 			removeOfflineLifts(lifts)
-			if bestFitOrder := determNextOrderAmongOnlineLifts(ID, lifts, localOrders); bestFitOrder.Value {
-				liftCtrl.Send_EXE_ORDER_event(extrnChs.EventQueue, bestFitOrder)
-			}
-			break
-
+			liftCtrl.Send_EXE_ORDER_event(extrnChs.EventQueue, determNextOrderAmongOnlineLifts(ID, lifts, localOrders))
 		}
 	}
 }

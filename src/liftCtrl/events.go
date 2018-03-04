@@ -12,7 +12,7 @@ type Event struct {
 }
 
 func Send_EXE_ORDER_event(eventQueue chan<- Event, order def.Order) {
-	eventQueue <- Event{eventType: evt_EXE_ORDER, floor: order.Floor, button: order.Button, boolean: true}
+	eventQueue <- Event{eventType: evt_EXE_ORDER, floor: order.Floor, button: order.Button, boolean: order.Value}
 
 }
 

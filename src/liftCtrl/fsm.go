@@ -50,7 +50,7 @@ func stateIDLE(event Event, ch Channels, liftStatus *def.Status, currentOrder *d
 	switch event.eventType {
 	case evt_EXE_ORDER:
 		if event.boolean == false {
-			break
+			return stateIDLE
 		}
 
 		*currentOrder = def.Order{Floor: event.floor, Button: event.button, Value: event.boolean}
@@ -76,8 +76,15 @@ func stateMOVE(event Event, ch Channels, liftStatus *def.Status, currentOrder *d
 	switch event.eventType {
 	case evt_EXE_ORDER:
 		newOrder := def.Order{Floor: event.floor, Button: event.button, Value: event.boolean}
-		if compareSimilarityOfOrders(newOrder, *currentOrder) {
+
+		if newOrder.Value == false && currentOrder.Value {
+			WARNING("MOVE TO CLOSEST FLOOR")
+			closestFloor := determClosestFloor(*liftStatus)
+			*currentOrder = def.Order{Button: def.BTN_INTERNAL, Floor: closestFloor, Value: false} 
+			fmt.Printf("%+v\n", *currentOrder)
 			return stateMOVE
+		} else {
+			return stateMOVE 
 		}
 
 		nextDir := determDir(*liftStatus,newOrder)
@@ -85,6 +92,7 @@ func stateMOVE(event Event, ch Channels, liftStatus *def.Status, currentOrder *d
 			*currentOrder = newOrder
 			hw.SetMotorDir(nextDir)
 			liftStatus.LastDir = nextDir
+			INFO("PUSH state")
 			pushStatusToChannels(ch,*liftStatus, liftStatus.LastDir)
 			return stateMOVE
 
@@ -92,7 +100,7 @@ func stateMOVE(event Event, ch Channels, liftStatus *def.Status, currentOrder *d
 			*currentOrder = newOrder
 			go completeOrder(ch,liftStatus,currentOrder)
 			return stateFLOOR
-		}
+		} 
 
 	case evt_NEW_FLOOR:
 		hw.SetFloorLamp(event.floor)
@@ -105,9 +113,11 @@ func stateMOVE(event Event, ch Channels, liftStatus *def.Status, currentOrder *d
 			return stateFLOOR
 		}
 	case evt_LIFT_OBSTRUCTION:
+			WARNING("evt_LIFT_OBSTRUCTION")
 			liftStatus.Operative = false
 			closestFloor := determClosestFloor(*liftStatus)
-			*currentOrder = def.Order{Button: def.BTN_INTERNAL, Floor: closestFloor, Value: true} 
+			*currentOrder = def.Order{Button: def.BTN_INTERNAL, Floor: closestFloor, Value: false} 
+			fmt.Printf("%+v\n", *currentOrder)
 	default:
 		WARNING("Unexpected event")
 		fmt.Println(event)
@@ -118,9 +128,7 @@ func stateMOVE(event Event, ch Channels, liftStatus *def.Status, currentOrder *d
 func stateFLOOR(event Event, ch Channels, liftStatus *def.Status, currentOrder *def.Order) stateFunc {
 	switch event.eventType {
 	case evt_EXE_ORDER:
-		*currentOrder = def.Order{Floor: event.floor, Button: event.button, Value: event.boolean}
 		break
-
 	case evt_DOOR_TIMER_OUT:
 		return stateIDLE
 
@@ -134,19 +142,14 @@ func stateFLOOR(event Event, ch Channels, liftStatus *def.Status, currentOrder *
 
 // //Utilities
 func determClosestFloor(liftStatus def.Status) int {
-	if liftStatus.LastFloor > def.GROUND_FLOOR && liftStatus.LastFloor < def.TOP_FLOOR {
-		return liftStatus.LastFloor + liftStatus.LastDir 
+	if liftStatus.LastDir == def.DIR_UP && liftStatus.LastFloor < def.TOP_FLOOR {
+		return liftStatus.LastFloor + 1
+	} else if liftStatus.LastDir == def.DIR_DOWN && liftStatus.LastFloor > def.GROUND_FLOOR {
+		return liftStatus.LastFloor - 1
 	}
 	return liftStatus.LastFloor
 }
 
-/* return true if equal floor, button, and value are equal, else returns false */
-func compareSimilarityOfOrders(order1, order2 def.Order) bool {
-	if order1.Floor == order2.Floor && order1.Button == order2.Button && order1.Value == order2.Value {
-		return true
-	} 
-	return false
-}
 
 func pushStatusToChannels(ch Channels, liftStatus def.Status, currentDir int) {
 	ch.Status_to_LiftWatchdog <- def.Status{LastFloor: liftStatus.LastFloor, LastDir: currentDir}
@@ -154,13 +157,12 @@ func pushStatusToChannels(ch Channels, liftStatus def.Status, currentDir int) {
 }
 
 func determDir(status def.Status, order def.Order) int {
-	if order.Floor > status.LastFloor {
+	if order.Value == false || order.Floor == status.LastFloor {
+		return def.DIR_STOP
+	} else if order.Floor > status.LastFloor {
 		return def.DIR_UP
-
-	} else if order.Floor < status.LastFloor {
-		return def.DIR_DOWN
-	}
-	return def.DIR_STOP
+	} 
+	return def.DIR_DOWN
 }
 
 func completeOrder(ch Channels, liftStatus *def.Status, currentOrder *def.Order) {
