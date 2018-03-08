@@ -10,6 +10,23 @@ import (
 )
 
 //----------------------------
+//Events
+type Event struct {
+	eventType int
+	button    int
+	floor     int
+	boolean   bool
+}
+
+//events
+const (
+	evt_EXE_ORDER = int(iota)
+	evt_NEW_FLOOR
+	evt_DOOR_TIMER_OUT
+	evt_LIFT_OBSTRUCTION
+)
+
+//----------------------------
 //types
 
 type Channels struct {
@@ -20,6 +37,7 @@ type Channels struct {
 }
 
 type stateFunc func(Event, Channels,*def.Status,*def.Order) (next stateFunc)
+
 
 //----------------------------
 //fsm
@@ -35,6 +53,7 @@ func Run(ch Channels) {
 	if floor := hw.GetFloor(); floor > -1 {
 		liftStatus.LastFloor = floor
 	}
+
 	liftStatus.LastDir = def.DIR_DOWN
 	liftStatus.Operative = true
 	pushStatusToChannels(ch,liftStatus,def.DIR_STOP)
@@ -46,14 +65,42 @@ func Run(ch Channels) {
 	}
 }
 
+func Send_EXE_ORDER_event(eventQueue chan<- Event, order def.Order) {
+	eventQueue <- Event{
+		eventType: evt_EXE_ORDER, 
+		floor: order.Floor, 
+		button: order.Button, 
+		boolean: order.Value}
+}
+
+func Send_NEW_FLOOR_event(eventQueue chan<- Event, floor int) {
+	eventQueue <- Event{
+		eventType: evt_NEW_FLOOR,
+		floor:     floor,
+		button:    -1,
+		boolean:   true}
+}
+
+func Send_LIFT_OBSTRUCTION_event(eventQueue chan<- Event) {
+	eventQueue <- Event{
+		eventType: evt_LIFT_OBSTRUCTION, 
+		boolean: true}
+}
+
+
+// State machine
+
 func stateIDLE(event Event, ch Channels, liftStatus *def.Status, currentOrder *def.Order) stateFunc {
 	switch event.eventType {
 	case evt_EXE_ORDER:
 		if event.boolean == false {
 			return stateIDLE
 		}
-
-		*currentOrder = def.Order{Floor: event.floor, Button: event.button, Value: event.boolean}
+		// createOrder
+		*currentOrder = def.Order{
+			Floor: event.floor, 
+			Button: event.button, 
+			Value: event.boolean}
 		nextDir := determDir(*liftStatus,*currentOrder)
 
 		if nextDir == def.DIR_UP || nextDir == def.DIR_DOWN {
@@ -80,7 +127,11 @@ func stateMOVE(event Event, ch Channels, liftStatus *def.Status, currentOrder *d
 		if newOrder.Value == false && currentOrder.Value {
 			WARNING("MOVE TO CLOSEST FLOOR")
 			closestFloor := determClosestFloor(*liftStatus)
-			*currentOrder = def.Order{Button: def.BTN_INTERNAL, Floor: closestFloor, Value: false} 
+			// createOrder
+			*currentOrder = def.Order{
+				Button: def.BTN_INTERNAL, 
+				Floor: closestFloor, 
+				Value: false} 
 			fmt.Printf("%+v\n", *currentOrder)
 			return stateMOVE
 		} else {
@@ -116,7 +167,11 @@ func stateMOVE(event Event, ch Channels, liftStatus *def.Status, currentOrder *d
 			WARNING("evt_LIFT_OBSTRUCTION")
 			liftStatus.Operative = false
 			closestFloor := determClosestFloor(*liftStatus)
-			*currentOrder = def.Order{Button: def.BTN_INTERNAL, Floor: closestFloor, Value: false} 
+			// createOrder			
+			*currentOrder = def.Order{
+				Button: def.BTN_INTERNAL, 
+				Floor: closestFloor, 
+				Value: false} 
 			fmt.Printf("%+v\n", *currentOrder)
 	default:
 		WARNING("Unexpected event")
@@ -177,7 +232,13 @@ func completeOrder(ch Channels, liftStatus *def.Status, currentOrder *def.Order)
 		hw.SetButtonLamp(currentOrder.Floor, currentOrder.Button, false)
 		ch.CompleteOrder_to_SynchOrders <- *currentOrder
 	}
-	ch.CompleteOrder_to_SynchOrders <- def.Order{Floor: currentOrder.Floor, Button: def.BTN_INTERNAL, Value: false, Timestamp: time.Now().Unix()}
+	
+	// createOrder
+	ch.CompleteOrder_to_SynchOrders <- def.Order{
+		Floor: currentOrder.Floor, 
+		Button: def.BTN_INTERNAL, 
+		Value: false, 
+		Timestamp: time.Now().Unix()}
 	hw.SetButtonLamp(currentOrder.Floor, def.BTN_INTERNAL, false)
 
 	timer := time.NewTimer(time.Second * 3)

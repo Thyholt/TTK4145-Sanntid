@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-const BCAST_REPEAT_LIMIT = 5
 const LIFT_ACTIVITY_LIMIT = 200 // ms
 
 //timer

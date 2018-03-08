@@ -13,7 +13,10 @@ import (
 	"strings"
 	"time"
 )
-
+// Illustration of dependencies 
+// 			main 
+//			/ \
+// 		   /   \
 func main() {
 	//init flow between goroutines
 	ch_eventQueue := make(chan liftCtrl.Event)
@@ -42,6 +45,7 @@ func main() {
 		EventQueue:           ch_eventQueue,
 		StatusUpdate: ch_Status_liftCtrl_to_liftWatchdog}
 
+	// Wrap to get ID function
 	IP, err := localip.Get()
 	if err != nil {  //temporary bug for different IPs
 		s1 := rand.NewSource(time.Now().UnixNano())
@@ -52,11 +56,9 @@ func main() {
 	ID_temp, _ := strconv.ParseInt(strings.Split(IP, ".")[3], 10, 0)
 	ID := int(ID_temp)
 
-	//get CAB backup orders from file
-
 	//run goroutines
 	go hwPoll.Run(chs_hwPoll)
-	go synchOrders.Run(ID, chs_synchOrders) //backup as arg when register is done
+	go synchOrders.Run(ID, chs_synchOrders)
 	go liftCtrl.Run(chs_liftCtrl)
 	go liftWatchdog.Run(chs_liftWatchdog)
 

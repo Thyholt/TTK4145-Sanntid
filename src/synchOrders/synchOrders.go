@@ -23,9 +23,10 @@ type ExtrnChannels struct {
 }
 
 func Run(ID int, extrnChs ExtrnChannels) {
+	
+	// Initializiation order synchronization
 	var intrnChs intrnChannels
 	lifts := lifts.New(LIFT_ACTIVITY_LIMIT)
-
 	localOrders := orders.New()
 
 	initOrders(&localOrders)
@@ -58,6 +59,7 @@ func Run(ID int, extrnChs ExtrnChannels) {
 		case recvOrders := <-intrnChs.Net.RecvOrders:
 			localOrders.Merge(recvOrders)
 			break
+
 		case heartbeat := <-intrnChs.Net.RecvHeartbeat:
 			lifts.Update(heartbeat.ID, heartbeat.LiftState)
 			break
@@ -66,9 +68,8 @@ func Run(ID int, extrnChs ExtrnChannels) {
 		case <-intrnChs.Timers.BcastOrders:
 			bcastHallOrders(intrnChs.Net.BcastOrders, localOrders)
 			
-
 		case <-intrnChs.Timers.BcastHeartbeat:
-			bcastHeartbeat(intrnChs.Net.BcastHeartbeat,ID,lifts.Status(ID))
+			bcastHeartbeat(intrnChs.Net.BcastHeartbeat, ID, lifts.Status(ID))
 			break
 
 		case <-intrnChs.Timers.PushBestFitOrderToLiftCtrl:
@@ -80,6 +81,7 @@ func Run(ID int, extrnChs ExtrnChannels) {
 		}
 	}
 }
+
 func bcastHeartbeat(ch chan<- heartbeat, ID int, status def.Status) {
 	ch <- heartbeat{ID,status}
 }

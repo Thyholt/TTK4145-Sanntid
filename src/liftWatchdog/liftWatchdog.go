@@ -39,10 +39,4 @@ func Run(ch Channels) {
 
 		}
 	}
-
-}
-
-func generateEvent(event liftCtrl.Event, eventQueue chan<- liftCtrl.Event, delay int) {
-	time.Sleep(time.Second * time.Duration(delay))
-	eventQueue <- event
 }

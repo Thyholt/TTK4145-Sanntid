@@ -15,6 +15,8 @@ type Channels struct{
 }
 
 func Run(ch Channels) {
+
+	// Add initialization function
 	lastOrdersSensed := [][]bool{}
 	up := make([]bool, 4)
 	down := make([]bool, 4)
@@ -27,6 +29,9 @@ func Run(ch Channels) {
 
 	INFO("hwPoll/init" + "               |" + colors.ColG + " DONE" + colors.ColN)
 
+	// To here init
+
+	// Main routine
 	for {
 		pollOrderPanel(ch.Order_to_SynchOrders, lastOrdersSensed)
 		pollFloorSensor(ch.LiftCtrl_EventQueue, &lastSensedFloor)
@@ -37,6 +42,8 @@ func pollOrderPanel(order_To_OrderDistr chan<- def.Order, lastOrdersSensed [][]b
 	for button := def.BTN_UP; button < def.N_ORDER_BUTTONS; button++ {
 		for floor := def.GROUND_FLOOR; floor <= def.TOP_FLOOR; floor++ {
 			status := hw.ReadButton(floor, button)
+			
+			// Add wrapper functionality to if statement and if internals
 			if status && status != lastOrdersSensed[button][floor] {
 				lastOrdersSensed[button][floor] = true
 				order_To_OrderDistr <- def.Order{Floor:     floor,
@@ -50,8 +57,8 @@ func pollOrderPanel(order_To_OrderDistr chan<- def.Order, lastOrdersSensed [][]b
 }
 
 func pollFloorSensor(eventQueue chan<- liftCtrl.Event, lastFloorSensed *int) {
-	//fmt.Println("pollFloorSensor\n")
 	floor := hw.GetFloor()
+	// Add wrapper to if statement
 	if floor != -1 && floor != *lastFloorSensed {
 		liftCtrl.Send_NEW_FLOOR_event(eventQueue,floor)
 	}
