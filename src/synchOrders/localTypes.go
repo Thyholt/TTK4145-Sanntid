@@ -6,12 +6,12 @@ import (
 	"time"
 )
 
-const LIFT_ACTIVITY_LIMIT = 200 // ms
+const LIFT_ACTIVITY_LIMIT = 500 // ms
 
 //timer
 const (
-	timer_DURATION_BCAST_HEARTBEAT               = time.Millisecond * 50
-	timer_DURATION_BCAST_ORDERS                  = time.Millisecond * 100
+	timer_DURATION_BCAST_HEARTBEAT               = time.Millisecond * 10
+	timer_DURATION_BCAST_ORDERS                  = time.Millisecond * 50
 	timer_DURATION_PUSH_BESTFITORDER_TO_LIFTCTRL = time.Millisecond * 500
 )
 
