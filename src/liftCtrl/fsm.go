@@ -124,8 +124,8 @@ func stateMOVE(event Event, ch Channels, liftStatus *def.Status, currentOrder *d
 	case evt_EXE_ORDER:
 		newOrder := def.Order{Floor: event.floor, Button: event.button, Value: event.boolean}
 
+		WARNING("MOVE TO CLOSEST FLOOR")
 		if newOrder.Value == false && currentOrder.Value {
-			WARNING("MOVE TO CLOSEST FLOOR")
 			closestFloor := determClosestFloor(*liftStatus)
 			// createOrder
 			*currentOrder = def.Order{
@@ -186,7 +186,6 @@ func stateFLOOR(event Event, ch Channels, liftStatus *def.Status, currentOrder *
 		break
 	case evt_DOOR_TIMER_OUT:
 		return stateIDLE
-
 	default:
 		WARNING("Unexpected event")
 		fmt.Println(event)
@@ -226,10 +225,9 @@ func completeOrder(ch Channels, liftStatus *def.Status, currentOrder *def.Order)
 	pushStatusToChannels(ch,*liftStatus,def.DIR_STOP)
 
 	currentOrder.Value = false
-	currentOrder.Timestamp = time.Now().Unix()
+	currentOrder.Timestamp = time.Now()
 
 	if currentOrder.Button == def.BTN_UP || currentOrder.Button == def.BTN_DOWN {
-		hw.SetButtonLamp(currentOrder.Floor, currentOrder.Button, false)
 		ch.CompleteOrder_to_SynchOrders <- *currentOrder
 	}
 	
@@ -238,8 +236,7 @@ func completeOrder(ch Channels, liftStatus *def.Status, currentOrder *def.Order)
 		Floor: currentOrder.Floor, 
 		Button: def.BTN_INTERNAL, 
 		Value: false, 
-		Timestamp: time.Now().Unix()}
-	hw.SetButtonLamp(currentOrder.Floor, def.BTN_INTERNAL, false)
+		Timestamp: time.Now()}
 
 	timer := time.NewTimer(time.Second * 3)
 	<-timer.C

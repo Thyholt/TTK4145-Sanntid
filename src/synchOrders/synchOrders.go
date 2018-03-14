@@ -46,6 +46,13 @@ func Run(ID int, extrnChs ExtrnChannels) {
 			break
 
 		case completeOrder := <-extrnChs.ComleteOrder_from_liftCtrl:
+			if completeOrder.Value {
+				break
+			}
+			WARNING("SHIT")
+			ki := fmt.Sprint(completeOrder.Timestamp.After(localOrders.Get(completeOrder.Button,completeOrder.Floor).Timestamp))
+			fmt.Print(ki)
+
 			localOrders.Update(completeOrder)
 			cabOrdersBackup.Dump(localOrders)
 

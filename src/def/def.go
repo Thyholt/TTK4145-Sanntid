@@ -50,7 +50,7 @@ type Order struct {
 	Floor  		int
 	Button 		int
 	Value 		bool
-	Timestamp 	int64 //unix
+	Timestamp 	time.Time //unix
 }
 
 type Status struct {

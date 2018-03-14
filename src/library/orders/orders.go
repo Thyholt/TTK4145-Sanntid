@@ -26,7 +26,7 @@ func New() Orders {
 // Saves the newest order
 func (orders Orders) Update(order def.Order) {
 	ASSERTION_ERROR(!ValidateFloorButtonCombination(order.Button, order.Floor), "Invalid function arguments. Button: "+strconv.Itoa(order.Button)+" Floor: "+strconv.Itoa(order.Floor))
-	if order.Timestamp > orders[order.Button][order.Floor].Timestamp {
+	if order.Timestamp.After(orders[order.Button][order.Floor].Timestamp) {
 		orders[order.Button][order.Floor].Value = order.Value
 		orders[order.Button][order.Floor].Timestamp = order.Timestamp
 	}
@@ -43,7 +43,7 @@ func (orders Orders) Merge(ordersToMerge Orders) {
 	for floor := def.GROUND_FLOOR; floor < def.N_FLOOR; floor++ {
 		for button := range []int{def.BTN_UP, def.BTN_DOWN, def.BTN_INTERNAL} {
 			if ValidateFloorButtonCombination(button, floor) {
-				if ordersToMerge[button][floor].Timestamp > orders[button][floor].Timestamp {
+				if ordersToMerge[button][floor].Timestamp.After(orders[button][floor].Timestamp) {
 					orders[button][floor].Value = ordersToMerge[button][floor].Value
 					orders[button][floor].Timestamp = ordersToMerge[button][floor].Timestamp
 				}

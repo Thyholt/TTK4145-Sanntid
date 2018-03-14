@@ -45,11 +45,10 @@ func pollOrderPanel(order_To_OrderDistr chan<- def.Order, lastOrdersSensed [][]b
 			
 			// Add wrapper functionality to if statement and if internals
 			if status && status != lastOrdersSensed[button][floor] {
-				lastOrdersSensed[button][floor] = true
 				order_To_OrderDistr <- def.Order{Floor:     floor,
 												Button:    	button,
 												Value: 		true,
-												Timestamp: 	time.Now().Unix()}
+												Timestamp: 	time.Now()}
 			}
 			lastOrdersSensed[button][floor] = status
 		}
