@@ -139,7 +139,7 @@ func determNextOrderAmongOnlineLifts(liftID int, lifts lifts.Lifts, orders order
 		if lifts.NetState(id) == def.OFFLINE || lifts.Status(id).Operative == false {
 			break 
 		}
-		if temp_order, temp_dist = determClosestOrderAndDist(orders, lifts.Status(id)); temp_order.Value && temp_dist < dist {
+		if temp_order, temp_dist = determClosestOrderAndDist(orders, lifts.Status(id)); temp_order.Value && temp_dist < dist && liftID <= id {
 			return def.Order{Value: false}
 		}
 	}
@@ -148,7 +148,6 @@ func determNextOrderAmongOnlineLifts(liftID int, lifts lifts.Lifts, orders order
 	}
 	return def.Order{Value: false}
 }
-
 
 // Determs next order and distance
 // If successful, next order has value = true, else value = false
