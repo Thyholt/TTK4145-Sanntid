@@ -7,7 +7,7 @@ import (
 	"synchOrders"
 	"hwPoll"
 	"library/network/localip"
-	"fmt"
+	. "library/logger"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -45,24 +45,27 @@ func main() {
 		EventQueue:           ch_eventQueue,
 		StatusUpdate: ch_Status_liftCtrl_to_liftWatchdog}
 
-	// Wrap to get ID function
+	liftID := generateLiftID()
+
+	//run goroutines
+	go hwPoll.Run(chs_hwPoll)
+	go synchOrders.Run(liftID, chs_synchOrders)
+	go liftCtrl.Run(chs_liftCtrl)
+	go liftWatchdog.Run(chs_liftWatchdog)
+
+	//inf sleep
+	INFO("Main goes to sleep\n")
+	time.Sleep(time.Second * 1000000)
+}
+
+func generateLiftID() int {
 	IP, err := localip.Get()
-	if err != nil {  //temporary bug for different IPs
+	if err != nil {
 		s1 := rand.NewSource(time.Now().UnixNano())
 		r1 := rand.New(s1)
 		IP = "255.255.255." + strconv.Itoa(r1.Intn(100)+1)
 	}
 
 	ID_temp, _ := strconv.ParseInt(strings.Split(IP, ".")[3], 10, 0)
-	ID := int(ID_temp)
-
-	//run goroutines
-	go hwPoll.Run(chs_hwPoll)
-	go synchOrders.Run(ID, chs_synchOrders)
-	go liftCtrl.Run(chs_liftCtrl)
-	go liftWatchdog.Run(chs_liftWatchdog)
-
-	//inf sleep
-	fmt.Print("Main goes to sleep\n")
-	time.Sleep(time.Second * 1000000)
+	return int(ID_temp)
 }

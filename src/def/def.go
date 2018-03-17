@@ -11,7 +11,6 @@ const PORT = 16666
 
 //==================== Operation limits ======================|
 
-const MAX_NR_LIFTS = 5               // Nr
 const ORDER_COMPLETION_LIMIT = 35000 // ms
 const DOOR_OPEN_DURATION = 2500		 // ms
 

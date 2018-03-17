@@ -96,11 +96,8 @@ func stateIDLE(event Event, ch Channels, liftStatus *def.Status, currentOrder *d
 		if event.boolean == false {
 			return stateIDLE
 		}
-		// createOrder
-		*currentOrder = def.Order{
-			Floor: event.floor, 
-			Button: event.button, 
-			Value: event.boolean}
+
+		*currentOrder = def.Order{Floor: event.floor, Button: event.button, Value: event.boolean}
 		nextDir := determDir(*liftStatus,*currentOrder)
 
 		if nextDir == def.DIR_UP || nextDir == def.DIR_DOWN {
@@ -127,12 +124,7 @@ func stateMOVE(event Event, ch Channels, liftStatus *def.Status, currentOrder *d
 		WARNING("MOVE TO CLOSEST FLOOR")
 		if newOrder.Value == false && currentOrder.Value {
 			closestFloor := determClosestFloor(*liftStatus)
-			// createOrder
-			*currentOrder = def.Order{
-				Button: def.BTN_INTERNAL, 
-				Floor: closestFloor, 
-				Value: false} 
-			fmt.Printf("%+v\n", *currentOrder)
+			*currentOrder = def.Order{Button: def.BTN_INTERNAL, Floor: closestFloor, Value: false} 
 			return stateMOVE
 		} else {
 			return stateMOVE 
@@ -164,15 +156,9 @@ func stateMOVE(event Event, ch Channels, liftStatus *def.Status, currentOrder *d
 			return stateFLOOR
 		}
 	case evt_LIFT_OBSTRUCTION:
-			WARNING("evt_LIFT_OBSTRUCTION")
 			liftStatus.Operative = false
 			closestFloor := determClosestFloor(*liftStatus)
-			// createOrder			
-			*currentOrder = def.Order{
-				Button: def.BTN_INTERNAL, 
-				Floor: closestFloor, 
-				Value: false} 
-			fmt.Printf("%+v\n", *currentOrder)
+			*currentOrder = def.Order{Button: def.BTN_INTERNAL, Floor: closestFloor, Value: false} 
 	default:
 		WARNING("Unexpected event")
 		fmt.Println(event)
@@ -232,11 +218,8 @@ func completeOrder(ch Channels, liftStatus *def.Status, currentOrder *def.Order)
 	}
 	
 	// createOrder
-	ch.CompleteOrder_to_SynchOrders <- def.Order{
-		Floor: currentOrder.Floor, 
-		Button: def.BTN_INTERNAL, 
-		Value: false, 
-		Timestamp: time.Now()}
+	ch.CompleteOrder_to_SynchOrders <- def.Order{Button: def.BTN_INTERNAL, Floor: currentOrder.Floor, 
+												 Value: false, Timestamp: time.Now()}
 
 	timer := time.NewTimer(time.Millisecond * def.DOOR_OPEN_DURATION)
 	<-timer.C

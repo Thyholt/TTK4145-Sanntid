@@ -16,15 +16,8 @@ type Channels struct{
 
 func Run(ch Channels) {
 
-	// Add initialization function
-	lastOrdersSensed := [][]bool{}
-	up := make([]bool, 4)
-	down := make([]bool, 4)
-	internal := make([]bool, 4)
-	lastOrdersSensed = append(lastOrdersSensed, up)
-	lastOrdersSensed = append(lastOrdersSensed, down)
-	lastOrdersSensed = append(lastOrdersSensed, internal)
-
+	
+	lastOrdersSensedMatrix := createLastOrdersSensedMatrix()
 	lastSensedFloor := -1
 
 	INFO("hwPoll/init" + "               |" + colors.ColG + " DONE" + colors.ColN)
@@ -33,24 +26,19 @@ func Run(ch Channels) {
 
 	// Main routine
 	for {
-		pollOrderPanel(ch.Order_to_SynchOrders, lastOrdersSensed)
+		pollOrderPanel(ch.Order_to_SynchOrders, lastOrdersSensedMatrix)
 		pollFloorSensor(ch.LiftCtrl_EventQueue, &lastSensedFloor)
 	}
 }
 
-func pollOrderPanel(order_To_OrderDistr chan<- def.Order, lastOrdersSensed [][]bool) {
+func pollOrderPanel(order_To_OrderDistr chan<- def.Order, lastOrdersSensedMatrix [][]bool) {
 	for button := def.BTN_UP; button < def.N_ORDER_BUTTONS; button++ {
 		for floor := def.GROUND_FLOOR; floor <= def.TOP_FLOOR; floor++ {
 			status := hw.ReadButton(floor, button)
-			
-			// Add wrapper functionality to if statement and if internals
-			if status && status != lastOrdersSensed[button][floor] {
-				order_To_OrderDistr <- def.Order{Floor:     floor,
-												Button:    	button,
-												Value: 		true,
-												Timestamp: 	time.Now()}
+			if status && status != lastOrdersSensedMatrix[button][floor] {
+				order_To_OrderDistr <- def.Order{Floor: floor, Button: button, Value: true,	Timestamp: time.Now()}
 			}
-			lastOrdersSensed[button][floor] = status
+			lastOrdersSensedMatrix[button][floor] = status
 		}
 	}
 }
@@ -62,5 +50,16 @@ func pollFloorSensor(eventQueue chan<- liftCtrl.Event, lastFloorSensed *int) {
 		liftCtrl.Send_NEW_FLOOR_event(eventQueue,floor)
 	}
 	*lastFloorSensed = floor
+}
+
+func createLastOrdersSensedMatrix() [][]bool {
+	lastOrdersSensedMatrix := [][]bool{}
+	up := make([]bool, 4)
+	down := make([]bool, 4)
+	internal := make([]bool, 4)
+	lastOrdersSensedMatrix = append(lastOrdersSensedMatrix, up)
+	lastOrdersSensedMatrix = append(lastOrdersSensedMatrix, down)
+	lastOrdersSensedMatrix = append(lastOrdersSensedMatrix, internal)
+	return lastOrdersSensedMatrix
 }
 
