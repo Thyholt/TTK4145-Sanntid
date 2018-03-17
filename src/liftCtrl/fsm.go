@@ -238,7 +238,7 @@ func completeOrder(ch Channels, liftStatus *def.Status, currentOrder *def.Order)
 		Value: false, 
 		Timestamp: time.Now()}
 
-	timer := time.NewTimer(time.Second * 3)
+	timer := time.NewTimer(time.Millisecond * def.DOOR_OPEN_DURATION)
 	<-timer.C
 
 	hw.SetDoorLamp(false)

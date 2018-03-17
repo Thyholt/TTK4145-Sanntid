@@ -13,6 +13,7 @@ const PORT = 16666
 
 const MAX_NR_LIFTS = 5               // Nr
 const ORDER_COMPLETION_LIMIT = 35000 // ms
+const DOOR_OPEN_DURATION = 2500		 // ms
 
 
 //button

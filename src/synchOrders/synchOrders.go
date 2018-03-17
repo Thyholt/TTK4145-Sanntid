@@ -155,6 +155,10 @@ func determNextOrderAmongOnlineLifts(liftID int, lifts lifts.Lifts, orders order
 	return def.Order{Value: false}
 }
 
+// info:   minElapsedTime [ms]
+func orderMeetMinElapsedTime(order def.Order, minElapsedTime time.Duration) bool {
+	return time.Since(order.Timestamp) * time.Millisecond >= minElapsedTime
+}
 
 // info:   minElapsedTime [ms]
 func determClosestOrderAndDist(orders orders.Orders, liftStatus def.Status, minElapsedTime time.Duration) (def.Order,int) {
@@ -184,11 +188,6 @@ func determClosestOrderAndDist(orders orders.Orders, liftStatus def.Status, minE
 		}
 	}
 	return def.Order{Value: false}, def.INF
-}
-
-// info:   minElapsedTime [ms]
-func orderMeetMinElapsedTime(order def.Order, minElapsedTime time.Duration) bool {
-	return time.Since(order.Timestamp) * time.Millisecond >= minElapsedTime
 }
 
 // info:   looks for order in which order.Value is true
