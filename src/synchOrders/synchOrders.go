@@ -84,7 +84,7 @@ func Run(ID int, extrnChs ExtrnChannels) {
 			localOrders.Print()
 			updateOrderbuttonLights(localOrders)
 			removeOfflineLifts(lifts)
-			liftCtrl.Send_EXE_ORDER_event(extrnChs.EventQueue, determNextOrderAmongOnlineLifts(ID, lifts, localOrders))
+			liftCtrl.Send_EXE_ORDER_event(extrnChs.EventQueue, determNextOrderAmongOnlineLifts(ID, lifts, localOrders, def.ORDER_COMPLETION_LIMIT))
 		}
 	}
 }
@@ -124,22 +124,28 @@ func updateOrderbuttonLights(o orders.Orders) {
 	}
 }
 
-func determNextOrderAmongOnlineLifts(liftID int, lifts lifts.Lifts, orders orders.Orders) def.Order {
+// orderCompletionLimit [ms]
+func determNextOrderAmongOnlineLifts(liftID int, lifts lifts.Lifts, orders orders.Orders, orderCompletionLimit time.Duration) def.Order {
+	// see if any order has exceeded the completionLimit, and if so choose the closest one
+	temp_order, temp_dist := determClosestOrderAndDist(orders, lifts.Status(liftID),orderCompletionLimit)
+	if temp_order.Value  && lifts.Status(liftID).Operative == true {
+		return temp_order
+	}
+
 	// see if closest order is an cab order
-	temp_order, temp_dist := determClosestOrderAndDist(orders, lifts.Status(liftID))
+	temp_order, temp_dist = determClosestOrderAndDist(orders, lifts.Status(liftID), def.NULL * time.Second)
 	if temp_order.Value && temp_order.Button == def.BTN_INTERNAL && lifts.Status(liftID).Operative == true {
 		return temp_order
 	}
 
-	// see if self is closest to an hall order
+	// see if self lift is closest to an hall order
 	temp_dist = def.INF
-
-	order, dist := determClosestOrderAndDist(orders, lifts.Status(liftID))
+	order, dist := determClosestOrderAndDist(orders, lifts.Status(liftID),def.NULL * time.Second)
 	for _ , id := range lifts.IDs() {
 		if lifts.NetState(id) == def.OFFLINE || lifts.Status(id).Operative == false {
 			break 
 		}
-		if temp_order, temp_dist = determClosestOrderAndDist(orders, lifts.Status(id)); temp_order.Value && temp_dist < dist && liftID <= id {
+		if temp_order, temp_dist = determClosestOrderAndDist(orders, lifts.Status(id),def.NULL * time.Second); temp_order.Value && temp_dist < dist && liftID <= id {
 			return def.Order{Value: false}
 		}
 	}
@@ -149,11 +155,11 @@ func determNextOrderAmongOnlineLifts(liftID int, lifts lifts.Lifts, orders order
 	return def.Order{Value: false}
 }
 
-// Determs next order and distance
-// If successful, next order has value = true, else value = false
-func determClosestOrderAndDist(orders orders.Orders, liftStatus def.Status) (def.Order,int) {
-	var floor, button, distance int
-	var done bool
+
+// info:   minElapsedTime [ms]
+func determClosestOrderAndDist(orders orders.Orders, liftStatus def.Status, minElapsedTime time.Duration) (def.Order,int) {
+	var order def.Order
+	var distance int
 	if liftStatus.LastFloor != def.GROUND_FLOOR && orders.Get(def.BTN_DOWN, liftStatus.LastFloor).Value {
 		return orders.Get(def.BTN_DOWN, liftStatus.LastFloor), def.NULL
 	} else if liftStatus.LastFloor != def.TOP_FLOOR && orders.Get(def.BTN_UP, liftStatus.LastFloor).Value {
@@ -161,49 +167,56 @@ func determClosestOrderAndDist(orders orders.Orders, liftStatus def.Status) (def
 	}
 
 	if liftStatus.LastDir == def.DIR_UP {
-		if floor, button, distance, done = searchUp(orders, liftStatus.LastFloor, def.TOP_FLOOR, distance); done {
-			return def.Order{Button: button, Floor: floor, Value: true}, distance
-		} else if floor, button, distance, done = searchDown(orders, def.TOP_FLOOR, def.GROUND_FLOOR, distance); done {
-			return def.Order{Button: button, Floor: floor, Value: true}, distance
-		} else if floor, button, distance, done = searchUp(orders, def.GROUND_FLOOR, liftStatus.LastFloor, distance); done {
-			return def.Order{Button: button, Floor: floor, Value: true}, distance
+		if order, distance = searchUp(orders, liftStatus.LastFloor, def.TOP_FLOOR, distance); order.Value {
+			if orderMeetMinElapsedTime(order,minElapsedTime) {return order, distance}
+		} else if order, distance = searchDown(orders, def.TOP_FLOOR, def.GROUND_FLOOR, distance); order.Value {
+			if orderMeetMinElapsedTime(order,minElapsedTime) {return order, distance}
+		} else if order, distance = searchUp(orders, def.GROUND_FLOOR, liftStatus.LastFloor, distance); order.Value {
+			if orderMeetMinElapsedTime(order,minElapsedTime) {return order, distance}
 		}
 	} else if liftStatus.LastDir == def.DIR_DOWN {
-		if floor, button, distance, done = searchDown(orders, liftStatus.LastFloor, def.GROUND_FLOOR, distance); done {
-			return def.Order{Button: button, Floor: floor, Value: true}, distance
-		} else if floor, button, distance, done = searchUp(orders, def.GROUND_FLOOR, def.TOP_FLOOR, distance); done {
-			return def.Order{Button: button, Floor: floor, Value: true}, distance
-		} else if floor, button, distance, done = searchDown(orders, def.TOP_FLOOR, liftStatus.LastFloor, distance); done {
-			return def.Order{Button: button, Floor: floor, Value: true}, distance
+		if order, distance = searchDown(orders, liftStatus.LastFloor, def.GROUND_FLOOR, distance); order.Value {
+			if orderMeetMinElapsedTime(order,minElapsedTime) {return order, distance}
+		} else if order, distance = searchUp(orders, def.GROUND_FLOOR, def.TOP_FLOOR, distance); order.Value {
+			if orderMeetMinElapsedTime(order,minElapsedTime) {return order, distance}
+		} else if order, distance = searchDown(orders, def.TOP_FLOOR, liftStatus.LastFloor, distance); order.Value {
+			if orderMeetMinElapsedTime(order,minElapsedTime) {return order, distance}
 		}
 	}
 	return def.Order{Value: false}, def.INF
 }
 
-//floor, button, distance, and done
-func searchDown(orders orders.Orders, top int, buttom int, dist int) (int, int, int, bool) {
-	for floor := top; floor > buttom; floor-- {
-		if done := orders.Get(def.BTN_DOWN, floor).Value; done {
-			return floor, def.BTN_DOWN, dist, true
-		} else if done := orders.Get(def.BTN_INTERNAL, floor).Value; done {
-			return floor, def.BTN_INTERNAL, dist, true
-		}
-		dist += 1
-	}
-	return def.NONE, def.NONE, dist, false
+// info:   minElapsedTime [ms]
+func orderMeetMinElapsedTime(order def.Order, minElapsedTime time.Duration) bool {
+	return time.Since(order.Timestamp) * time.Millisecond >= minElapsedTime
 }
 
-//floor, button, distance, and done
-func searchUp(orders orders.Orders, buttom int, top int, dist int) (int, int, int, bool) {
-	for floor := buttom; floor < top; floor++ {
-		if done := orders.Get(def.BTN_UP, floor).Value; done {
-			return floor, def.BTN_UP, dist, true
-		} else if done := orders.Get(def.BTN_INTERNAL, floor).Value; done {
-			return floor, def.BTN_INTERNAL, dist, true
+// info:   looks for order in which order.Value is true
+// return: order, distance
+func searchDown(orders orders.Orders, top int, buttom int, dist int) (def.Order, int) {
+	for floor := top; floor > buttom; floor-- {
+		if order := orders.Get(def.BTN_DOWN, floor); order.Value {
+			return order, dist
+		} else if order := orders.Get(def.BTN_INTERNAL, floor); order.Value {
+			return order, dist
 		}
 		dist += 1
 	}
-	return def.NONE, def.NONE, dist, false
+	return def.Order{Value: false}, dist
+}
+
+// info:   looks for order in which order.Value is true
+// return: order, distance
+func searchUp(orders orders.Orders, buttom int, top int, dist int) (def.Order, int) {
+	for floor := buttom; floor < top; floor++ {
+		if order := orders.Get(def.BTN_UP, floor); order.Value {
+			return order, dist
+		} else if order := orders.Get(def.BTN_INTERNAL, floor); order.Value {
+			return order, dist
+		}
+		dist += 1
+	}
+	return def.Order{Value: false}, dist
 }
 
 func initOrders(localOrders *orders.Orders) {
