@@ -49,10 +49,6 @@ func Run(ID int, extrnChs ExtrnChannels) {
 			if completeOrder.Value {
 				break
 			}
-			WARNING("SHIT")
-			ki := fmt.Sprint(completeOrder.Timestamp.After(localOrders.Get(completeOrder.Button,completeOrder.Floor).Timestamp))
-			fmt.Print(ki)
-
 			localOrders.Update(completeOrder)
 			cabOrdersBackup.Dump(localOrders)
 
@@ -126,38 +122,54 @@ func updateOrderbuttonLights(o orders.Orders) {
 
 // orderCompletionLimit [ms]
 func determNextOrderAmongOnlineLifts(liftID int, lifts lifts.Lifts, orders orders.Orders, orderCompletionLimit time.Duration) def.Order {
+	if !lifts.Status(liftID).Operative {
+		return def.Order{Value: false}
+	}
+
 	// see if any order has exceeded the completionLimit, and if so choose the closest one
 	temp_order, temp_dist := determClosestOrderAndDist(orders, lifts.Status(liftID),orderCompletionLimit)
-	if temp_order.Value  && lifts.Status(liftID).Operative == true {
+	if temp_order.Value {
+		WARNING("orderCompletionLimit passed")
 		return temp_order
 	}
 
 	// see if closest order is an cab order
 	temp_order, temp_dist = determClosestOrderAndDist(orders, lifts.Status(liftID), def.NULL * time.Second)
-	if temp_order.Value && temp_order.Button == def.BTN_INTERNAL && lifts.Status(liftID).Operative == true {
+	if temp_order.Value && temp_order.Button == def.BTN_INTERNAL {
 		return temp_order
 	}
 
 	// see if self lift is closest to an hall order
 	temp_dist = def.INF
 	order, dist := determClosestOrderAndDist(orders, lifts.Status(liftID),def.NULL * time.Second)
+	if !order.Value {
+		return def.Order{Value: false}
+	}
+
 	for _ , id := range lifts.IDs() {
-		if lifts.NetState(id) == def.OFFLINE || lifts.Status(id).Operative == false {
-			break 
+		if id == liftID || (lifts.NetState(id) == def.OFFLINE || lifts.Status(id).Operative == false) {
+			continue
 		}
-		if temp_order, temp_dist = determClosestOrderAndDist(orders, lifts.Status(id),def.NULL * time.Second); temp_order.Value && temp_dist < dist && liftID <= id {
-			return def.Order{Value: false}
+
+		temp_order, temp_dist = determClosestOrderAndDist(orders, lifts.Status(id),def.NULL * time.Second)
+		if compareOrderSimilarity(order,temp_order) {
+			if temp_dist < dist || (temp_dist == dist && id < liftID) {
+				return def.Order{Value: false}
+			}
 		}
 	}
-	if lifts.Status(liftID).Operative {
-		return order
-	}
-	return def.Order{Value: false}
+
+	return order
 }
 
 // info:   minElapsedTime [ms]
-func orderMeetMinElapsedTime(order def.Order, minElapsedTime time.Duration) bool {
-	return time.Since(order.Timestamp) * time.Millisecond >= minElapsedTime
+func orderExceedesMinElapsedTime(order def.Order, minElapsedTime time.Duration) bool {
+	return time.Since(order.Timestamp) >= minElapsedTime * time.Millisecond
+}
+
+// neglects timestamp
+func compareOrderSimilarity(order1, order2 def.Order) bool {
+	return order1.Floor == order2.Floor && order1.Button == order2.Button && order1.Value == order2.Value 
 }
 
 // info:   minElapsedTime [ms]
@@ -172,19 +184,19 @@ func determClosestOrderAndDist(orders orders.Orders, liftStatus def.Status, minE
 
 	if liftStatus.LastDir == def.DIR_UP {
 		if order, distance = searchUp(orders, liftStatus.LastFloor, def.TOP_FLOOR, distance); order.Value {
-			if orderMeetMinElapsedTime(order,minElapsedTime) {return order, distance}
+			if orderExceedesMinElapsedTime(order,minElapsedTime) {return order, distance}
 		} else if order, distance = searchDown(orders, def.TOP_FLOOR, def.GROUND_FLOOR, distance); order.Value {
-			if orderMeetMinElapsedTime(order,minElapsedTime) {return order, distance}
+			if orderExceedesMinElapsedTime(order,minElapsedTime) {return order, distance}
 		} else if order, distance = searchUp(orders, def.GROUND_FLOOR, liftStatus.LastFloor, distance); order.Value {
-			if orderMeetMinElapsedTime(order,minElapsedTime) {return order, distance}
+			if orderExceedesMinElapsedTime(order,minElapsedTime) {return order, distance}
 		}
 	} else if liftStatus.LastDir == def.DIR_DOWN {
 		if order, distance = searchDown(orders, liftStatus.LastFloor, def.GROUND_FLOOR, distance); order.Value {
-			if orderMeetMinElapsedTime(order,minElapsedTime) {return order, distance}
+			if orderExceedesMinElapsedTime(order,minElapsedTime) {return order, distance}
 		} else if order, distance = searchUp(orders, def.GROUND_FLOOR, def.TOP_FLOOR, distance); order.Value {
-			if orderMeetMinElapsedTime(order,minElapsedTime) {return order, distance}
+			if orderExceedesMinElapsedTime(order,minElapsedTime) {return order, distance}
 		} else if order, distance = searchDown(orders, def.TOP_FLOOR, liftStatus.LastFloor, distance); order.Value {
-			if orderMeetMinElapsedTime(order,minElapsedTime) {return order, distance}
+			if orderExceedesMinElapsedTime(order,minElapsedTime) {return order, distance}
 		}
 	}
 	return def.Order{Value: false}, def.INF

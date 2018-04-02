@@ -11,7 +11,7 @@ const PORT = 16666
 
 //==================== Operation limits ======================|
 
-const ORDER_COMPLETION_LIMIT = 35000 // ms
+const ORDER_COMPLETION_LIMIT = 20000 // ms
 const DOOR_OPEN_DURATION = 2500		 // ms
 
 

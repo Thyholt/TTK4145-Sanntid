@@ -14,7 +14,7 @@ type Channels struct {
 }
 
 func Run(ch Channels) {
-	moveLimit := time.Second * 3
+	moveLimit := time.Second * 4
 	infLimit := time.Second * 6666
 
 	timer := time.NewTimer(infLimit)

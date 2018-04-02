@@ -157,6 +157,8 @@ func stateMOVE(event Event, ch Channels, liftStatus *def.Status, currentOrder *d
 		}
 	case evt_LIFT_OBSTRUCTION:
 			liftStatus.Operative = false
+			pushStatusToChannels(ch,*liftStatus, liftStatus.LastDir)
+			
 			closestFloor := determClosestFloor(*liftStatus)
 			*currentOrder = def.Order{Button: def.BTN_INTERNAL, Floor: closestFloor, Value: false} 
 	default:
