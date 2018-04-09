@@ -13,10 +13,19 @@ import (
 	"strings"
 	"time"
 )
-// Illustration of dependencies 
-// 			main 
-//			/ \
-// 		   /   \
+/* Illustration of dependencies between  main goroutines
+			           main 
+	   /          |           |          \
+   hwPoll    synchOrders  liftCtrl   liftWatchdog  
+      | --------> |           |          |
+      | --------------------> |          |
+      |           |           |          |
+      |           | --------> |          |
+      |           | <-------- |          |
+      |           |           | -------> |
+      |           |           | <------- |         
+*/
+
 func main() {
 	//init flow between goroutines
 	ch_eventQueue := make(chan liftCtrl.Event)
